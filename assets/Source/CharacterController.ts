@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, input, Input, animation, Camera, Vec3, Quat, NodeSpace, toRadian } from 'cc';
+import { _decorator, Component, Node, input, Input, animation, Camera, Vec3, Quat, NodeSpace, toRadian, EventMouse, physics, geometry } from 'cc';
 import { getForward } from './Utils/NodeUtils';
 const { ccclass, property } = _decorator;
 
@@ -17,9 +17,15 @@ export class CharacterController extends Component {
     })
     public turnSpeed = 180.0;
 
+    @property
+    public moveInPlace = false;
+
+    @property
+    public debugView = false;
+
     start() {
-        input.on(Input.EventType.MOUSE_DOWN, this._onTouchOrMouseDown, this);
-        input.on(Input.EventType.MOUSE_UP, this._onTouchOrMouseUp, this);
+        input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
+        input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
     }
 
     update(deltaTime: number) {
@@ -27,7 +33,12 @@ export class CharacterController extends Component {
         animationController?.setValue('Move', this._move);
 
         if (this._move && this.view) {
-            const expectedDir = Vec3.clone(this.view.node.forward);
+            const expectedDir = new Vec3();
+            if (this.debugView) {
+                Vec3.copy(expectedDir, getForward(this.node));
+            } else {
+                Vec3.copy(expectedDir, this.view.node.forward);
+            }
             expectedDir.y = 0.0;
             expectedDir.normalize();
             const currentDir = getForward(this.node);
@@ -39,20 +50,45 @@ export class CharacterController extends Component {
             axis.normalize();
             const deltaRotation = Quat.fromAxisAngle(new Quat(), axis, deltaAngle);
             this.node.rotate(deltaRotation, NodeSpace.WORLD);
-            const newDir = getForward(this.node);
-            newDir.y = 0.0;
-            newDir.normalize();
-            const newPosition = Vec3.scaleAndAdd(new Vec3(), this.node.worldPosition, newDir, this.moveSpeed * deltaTime);
-            this.node.worldPosition = newPosition;
+            if (!this.moveInPlace) {
+                const newDir = getForward(this.node);
+                newDir.y = 0.0;
+                newDir.normalize();
+                const newPosition = Vec3.scaleAndAdd(new Vec3(), this.node.worldPosition, newDir, this.moveSpeed * deltaTime);
+                const b = 0.5;
+                const forwardHit = this._rayCastForward(new Vec3(newPosition.x + newDir.x * b, newPosition.y + 0.5, newPosition.z + newDir.z * b));
+                if (!forwardHit) {
+                    this.node.worldPosition = newPosition;
+                }
+            }
         }
     }
 
-    private _onTouchOrMouseDown() {
-        this._move = true;
+    private _onMouseDown(event: EventMouse) {
+        if (event.getButton() === EventMouse.BUTTON_LEFT) {
+            this._move = true;
+        }
     }
 
-    private _onTouchOrMouseUp() {
-        this._move = false;
+    private _onMouseUp(event: EventMouse) {
+        if (event.getButton() === EventMouse.BUTTON_LEFT) {
+            this._move = false;
+        }
+    }
+
+    private _rayCastForward(from: Readonly<Vec3>) {
+        const physicsSystem = physics.PhysicsSystem.instance;
+        const rayFrom = from;
+        const rayDir = getForward(this.node);
+        const ray = new geometry.Ray(rayFrom.x, rayFrom.y, rayFrom.z, rayDir.x, rayDir.y, rayDir.z);
+        const detected = physicsSystem.raycastClosest(ray, 1 << 1, 0.3);
+        if (!detected) {
+            return;
+        }
+        const { raycastClosestResult } = physicsSystem;
+        return {
+            hitPoint: Vec3.clone(raycastClosestResult.hitPoint),
+        };
     }
 
     private _move = false;

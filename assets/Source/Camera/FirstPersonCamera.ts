@@ -190,12 +190,14 @@ export class FirstPersonCamera extends cc.Component {
     }
 
     private _onMouseMove (event: cc.EventMouse) {
-        if (this._mouseOrTouchMoveEnabled) {
+        if (this._mouseButtonPressing.left || this._mouseButtonPressing.right) {
             const dx = event.getDeltaX();
             if (dx) {
                 const angle = -dx * this.horizonRotationSpeed;
                 this._rotateHorizon(angle);
             }
+        }
+        if (this._mouseButtonPressing.right) {
             const dy = event.getDeltaY();
             if (dy) {
                 const angle = -dy * this.verticalRotationSpeed;
@@ -364,9 +366,5 @@ export class FirstPersonCamera extends cc.Component {
         const q = cc.math.Quat.fromAxisAngle(new cc.math.Quat(), axis, cc.math.toRadian(clampedAngle));
         cc.math.Vec3.transformQuat(this._currentDir, this._currentDir, q);
         this._currentDirDirty = true;
-    }
-
-    private get _mouseOrTouchMoveEnabled() {
-        return this._mouseButtonPressing.left;
     }
 }
